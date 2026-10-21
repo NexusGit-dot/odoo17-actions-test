@@ -4,7 +4,7 @@ Two workflows are provided:
 
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
-| **Odoo CI** | `.github/workflows/ci.yml` | push / PR on `17.0`, manual | lint + install + unit tests |
+| **Odoo CI** | `.github/workflows/ci.yml` | push / PR on any branch, manual | lint + install + unit tests |
 | **Odoo Deploy** | `.github/workflows/deploy.yml` | manual, `v*` tag | pull the code on a server and restart Odoo |
 
 The same `ci.yml` works in two situations:
@@ -24,7 +24,7 @@ points to the official Odoo repository, so add your own fork first:
 ```bash
 cd /path/to/Odoo17/odoo17
 git remote add mine git@github.com:<your-user>/<your-repo>.git
-git push mine 17.0
+git push mine main
 ```
 
 Then open the repository on GitHub: the **Actions** tab lists the two
