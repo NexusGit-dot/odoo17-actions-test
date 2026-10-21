@@ -1,0 +1,89 @@
+<section class="oe_container">
+    <div class="oe_row oe_spaced">
+        <h2 class="oe_slogan" style="color:#875A7B;">GitHub Actions Status</h2>
+        <h3 class="oe_slogan">Show the CI status of a GitHub repository inside Odoo</h3>
+        <div class="oe_span12">
+            <p class="oe_mt32">
+                This module calls the GitHub REST API and displays the workflow runs of a
+                repository directly in Odoo: workflow name, result badge, branch, commit,
+                duration and a direct link to the run on GitHub.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container oe_dark">
+    <div class="oe_row oe_spaced">
+        <h3 class="oe_slogan">Menus</h3>
+        <div class="oe_span12">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td style="width:50%;"><b>CI (GitHub Actions) &gt; Workflow runs</b></td>
+                        <td>The list of the runs, with a <b>Refresh</b> button.</td>
+                    </tr>
+                    <tr>
+                        <td><b>CI (GitHub Actions) &gt; Configuration</b></td>
+                        <td>Repository, branch, access token and refresh options.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container">
+    <div class="oe_row oe_spaced">
+        <h3 class="oe_slogan">Configuration</h3>
+        <div class="oe_span12">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td style="width:30%;"><b>owner</b></td>
+                        <td>GitHub login of the owner, e.g. <code>NexusGit-dot</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><b>repo</b></td>
+                        <td>Name of the repository, e.g. <code>nexusgrid</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><b>branch</b></td>
+                        <td>Optional, restricts the list to a single branch.</td>
+                    </tr>
+                    <tr>
+                        <td><b>token</b></td>
+                        <td>Optional, a token with the <code>Actions: read</code> permission.
+                            It raises the API rate limit from 60 to 5000 requests per hour and
+                            allows watching a private repository.</td>
+                    </tr>
+                    <tr>
+                        <td><b>limit</b></td>
+                        <td>Number of runs displayed and kept in database.</td>
+                    </tr>
+                    <tr>
+                        <td><b>auto_refresh</b></td>
+                        <td>Refresh the status every 5 minutes with the scheduled action.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="oe_container oe_dark">
+    <div class="oe_row oe_spaced">
+        <h3 class="oe_slogan">How it works</h3>
+        <div class="oe_span12">
+            <ul>
+                <li>The runs are fetched from the GitHub API and stored in the
+                    <code>github.actions.run</code> table, so the list opens instantly and
+                    keeps working when the network or the API is down.</li>
+                <li>The scheduled action <i>GitHub Actions: refresh the CI status</i>
+                    updates the table every 5 minutes.</li>
+                <li>The button <b>Refresh</b> forces an immediate update.</li>
+                <li>A failed call never breaks the scheduled action: the last known status is
+                    kept and the error is only written in the server log.</li>
+            </ul>
+        </div>
+    </div>
+</section>

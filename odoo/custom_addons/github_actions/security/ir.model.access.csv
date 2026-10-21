@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_github_actions_run_user,github.actions.run user,model_github_actions_run,base.group_user,1,0,0,0
+access_github_actions_run_system,github.actions.run system,model_github_actions_run,base.group_system,1,1,1,1
+access_github_actions_config_user,github.actions.config user,model_github_actions_config,base.group_user,1,0,0,0
+access_github_actions_config_system,github.actions.config system,model_github_actions_config,base.group_system,1,1,1,1

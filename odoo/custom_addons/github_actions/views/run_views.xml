@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="github_actions_run_tree" model="ir.ui.view">
+        <field name="name">github.actions.run.tree</field>
+        <field name="model">github.actions.run</field>
+        <field name="arch" type="xml">
+            <tree string="Workflow runs" create="false" edit="false"
+                  decoration-info="outcome == 'pending'"
+                  decoration-warning="outcome == 'running'">
+                <header>
+                    <button name="action_refresh" type="object" string="Refresh" class="btn-secondary"/>
+                </header>
+                <field name="workflow_name"/>
+                <field name="outcome" widget="badge"
+                       decoration-success="outcome == 'success'"
+                       decoration-danger="outcome == 'failure'"
+                       decoration-warning="outcome == 'running'"
+                       decoration-info="outcome == 'pending'"/>
+                <field name="status"/>
+                <field name="conclusion"/>
+                <field name="branch"/>
+                <field name="commit"/>
+                <field name="run_number"/>
+                <field name="started_at"/>
+                <field name="duration_display"/>
+                <field name="actor"/>
+                <button name="action_open_run" type="object" string="Open" icon="fa-external-link"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="github_actions_run_form" model="ir.ui.view">
+        <field name="name">github.actions.run.form</field>
+        <field name="model">github.actions.run</field>
+        <field name="arch" type="xml">
+            <form string="Workflow run" create="false" edit="false">
+                <header>
+                    <button name="action_open_run" type="object" string="Open on GitHub" class="btn-primary"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Workflow">
+                            <field name="workflow_name"/>
+                            <field name="outcome"/>
+                            <field name="status"/>
+                            <field name="conclusion"/>
+                            <field name="run_number"/>
+                            <field name="event"/>
+                        </group>
+                        <group string="Commit">
+                            <field name="branch"/>
+                            <field name="commit"/>
+                            <field name="actor"/>
+                            <field name="repository"/>
+                        </group>
+                        <group string="Timing">
+                            <field name="started_at"/>
+                            <field name="completed_at"/>
+                            <field name="duration_display"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="github_actions_run_search" model="ir.ui.view">
+        <field name="name">github.actions.run.search</field>
+        <field name="model">github.actions.run</field>
+        <field name="arch" type="xml">
+            <search string="Workflow runs">
+                <field name="workflow_name"/>
+                <field name="branch"/>
+                <field name="outcome"/>
+                <filter name="failed" string="Failed" domain="[('outcome', '=', 'failure')]"/>
+                <filter name="succeeded" string="Successful" domain="[('outcome', '=', 'success')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_workflow" string="Workflow" context="{'group_by': 'workflow_name'}"/>
+                    <filter name="group_branch" string="Branch" context="{'group_by': 'branch'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="github_actions_run_action" model="ir.actions.act_window">
+        <field name="name">Workflow runs</field>
+        <field name="res_model">github.actions.run</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="github_actions_run_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No workflow run yet.</p>
+            <p>
+                Open <b>CI (GitHub Actions) &gt; Configuration</b> to check the repository,
+                then press <b>Refresh</b> to load the runs of the GitHub API.
+            </p>
+        </field>
+    </record>
+
+</odoo>

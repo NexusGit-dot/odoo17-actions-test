@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="github_actions_config_default" model="github.actions.config">
+        <field name="owner">NexusGit-dot</field>
+        <field name="repo">nexusgrid</field>
+        <field name="limit">30</field>
+    </record>
+</odoo>

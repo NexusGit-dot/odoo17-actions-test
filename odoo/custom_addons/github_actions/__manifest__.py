@@ -1,0 +1,20 @@
+{
+    "name": "GitHub Actions Status",
+    "summary": "Show the GitHub Actions CI status of a repository inside Odoo",
+    "version": "17.0.1.0.0",
+    "category": "Developer Tools",
+    "author": "NexusGit-dot",
+    "license": "LGPL-3",
+    "website": "https://github.com/NexusGit-dot",
+    "depends": ["base"],
+    "data": [
+        "security/ir.model.access.csv",
+        "data/github_actions_config.xml",
+        "data/ir_cron.xml",
+        "views/config_views.xml",
+        "views/run_views.xml",
+        "views/menus.xml",
+    ],
+    "installable": True,
+    "application": False,
+}

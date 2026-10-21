@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="ir_cron_github_actions_refresh" model="ir.cron">
+        <field name="name">GitHub Actions: refresh the CI status</field>
+        <field name="model_id" ref="model_github_actions_run"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_refresh()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="priority">20</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>
