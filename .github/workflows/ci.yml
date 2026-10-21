@@ -62,7 +62,7 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             files=$(gh api --paginate "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" --jq '.[].filename')
           else
-            files=$(git diff --name-only HEAD~1 HEAD)
+            files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
           fi
           pyfiles=$(printf '%s\n' "$files" | grep '\.py$' || true)
           if [ -z "$pyfiles" ]; then
