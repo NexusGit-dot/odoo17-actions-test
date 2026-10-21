@@ -1,0 +1,25 @@
+# Lint configuration used by the CI for the addons owned by this repository.
+#
+# It extends the root ruff.toml (the configuration generated for Odoo's
+# runbot) and only removes the rules that Odoo does not enforce on its own
+# codebase - see the header of ruff.toml for the exact list. Thanks to that,
+# code copied from the Odoo core (one import per line, `COM812`, ...) does not
+# raise false positives, while real problems (F, E, B, SIM, ...) are still
+# reported and block the pipeline.
+extend = "../ruff.toml"
+
+[lint]
+ignore = [
+    "B904",    # raise-without-from-inside-except
+    "COM812",  # missing-trailing-comma
+    "E741",    # ambiguous-variable-name
+    "EM101",   # raw-string-in-exception-message
+    "I001",    # unsorted-imports (Odoo writes one import per line)
+    "RET",     # flake8-return
+    "RUF021",  # ambiguous-unicode-character-string
+    "RUF102",  # invalid-rule-code
+    "TID252",  # relative-imports
+    "TRY002",  # raise-vanilla-class
+    "UP006",   # non-pep585-annotation
+    "UP007",   # non-pep604-annotation
+]

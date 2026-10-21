@@ -1,0 +1,101 @@
+name: Odoo Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "17.0"
+      modules:
+        description: "Modules to upgrade after the deployment (comma separated, empty = restart only)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: odoo-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Set up the SSH key
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "Host key of ${{ secrets.DEPLOY_HOST }} added to known_hosts."
+
+      - name: Deploy the code and restart Odoo
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_BRANCH: ${{ inputs.branch || '17.0' }}
+          ODOO_SERVICE: ${{ secrets.ODOO_SERVICE }}
+          ODOO_DB: ${{ secrets.ODOO_DB }}
+          ODOO_CONF: ${{ secrets.ODOO_CONF }}
+          ODOO_MODULES: ${{ inputs.modules }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_BRANCH='${DEPLOY_BRANCH}' \
+             ODOO_SERVICE='${ODOO_SERVICE}' ODOO_DB='${ODOO_DB}' \
+             ODOO_CONF='${ODOO_CONF}' ODOO_MODULES='${ODOO_MODULES}' \
+             bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          echo "::group::Repository"
+          git fetch --all --tags --prune
+          git checkout "$DEPLOY_BRANCH"
+          git reset --hard "origin/$DEPLOY_BRANCH"
+          echo "Deployed commit: $(git rev-parse --short HEAD)"
+          echo "::endgroup::"
+
+          if [ -n "${ODOO_MODULES:-}" ]; then
+            echo "::group::Module upgrade ($ODOO_MODULES)"
+            sudo systemctl stop "$ODOO_SERVICE"
+            ./odoo-bin -c "$ODOO_CONF" -d "$ODOO_DB" -u "$ODOO_MODULES" --stop-after-init --no-http
+            sudo systemctl start "$ODOO_SERVICE"
+            echo "::endgroup::"
+          else
+            echo "::group::Restart"
+            sudo systemctl restart "$ODOO_SERVICE"
+            echo "::endgroup::"
+          fi
+
+          sleep 5
+          sudo systemctl is-active --quiet "$ODOO_SERVICE"
+          echo "Odoo service '$ODOO_SERVICE' is running."
+          REMOTE
+
+      - name: Check that the server answers
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+        run: |
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "DEPLOY_URL secret is not set, skipping the HTTP check."
+            exit 0
+          fi
+          for i in $(seq 1 10); do
+            if curl -fsS -o /dev/null -w '%{http_code}' "$DEPLOY_URL/web/login" | grep -qE '^(200|302)$'; then
+              echo "Odoo is up and answering on $DEPLOY_URL"
+              exit 0
+            fi
+            echo "Attempt $i/10: Odoo is not ready yet, retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::Odoo did not answer on $DEPLOY_URL"
+          exit 1

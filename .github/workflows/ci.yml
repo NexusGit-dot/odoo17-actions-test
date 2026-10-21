@@ -1,0 +1,248 @@
+name: Odoo CI
+
+on:
+  push:
+    branches: ["17.0"]
+  pull_request:
+    branches: ["17.0"]
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: "Modules to install/test (comma separated). Default: every module of odoo/custom_addons"
+        required: false
+        default: ""
+      test_tags:
+        description: "Odoo --test-tags filter. Default: the modules of odoo/custom_addons. Use '*' to run every test."
+        required: false
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  RUFF_VERSION: "0.16.1"        # version the root ruff.toml was generated for
+  ODOO_BRANCH: "17.0"
+  CUSTOM_ADDONS_DIR: "odoo/custom_addons"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Static checks: no database, no Odoo runtime, ~20 seconds
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # depth 2 is enough to diff the last two commits on a push
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: python -m pip install "ruff==${{ env.RUFF_VERSION }}"
+
+      - name: Ruff check (custom addons)
+        # The addons owned by this repository must be clean: this step blocks.
+        run: ruff check --config .github/ruff-custom-addons.toml "${{ env.CUSTOM_ADDONS_DIR }}"
+
+      - name: Ruff check (files changed by this push / pull request)
+        # The upstream Odoo sources are linted by Odoo's own runbot, so the
+        # issues found there are reported but do not block the pipeline.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          files=""
+          if [ -n "$PR_NUMBER" ]; then
+            files=$(gh api --paginate "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" --jq '.[].filename')
+          else
+            files=$(git diff --name-only HEAD~1 HEAD)
+          fi
+          pyfiles=$(printf '%s\n' "$files" | grep '\.py$' || true)
+          if [ -z "$pyfiles" ]; then
+            echo "No python file changed."
+            exit 0
+          fi
+          echo "Changed python files:"
+          echo "$pyfiles"
+          # shellcheck disable=SC2086
+          if ! ruff check --config .github/ruff-custom-addons.toml --output-format=concise $pyfiles; then
+            echo "::warning title=ruff::Lint issues in the changed files (not blocking)"
+          fi
+
+  addons-check:
+    name: Addons structure
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check manifests, packages, XML and CSV files
+        run: python .github/scripts/check_addons.py --addons-dir "${{ env.CUSTOM_ADDONS_DIR }}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Odoo unit tests against a real PostgreSQL database
+  # ---------------------------------------------------------------------------
+  test:
+    name: Unit tests (Odoo)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          # Odoo refuses to start with the 'postgres' super user (security risk),
+          # so the CI uses a dedicated 'odoo' role.
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: odoo
+      PGPASSWORD: odoo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the Odoo core
+        id: core
+        env:
+          ODOO_BRANCH: ${{ env.ODOO_BRANCH }}
+        run: |
+          set -euo pipefail
+          if [ -f "odoo-bin" ]; then
+            # The repository is a full Odoo fork: nothing to download.
+            echo "The Odoo sources are part of this repository."
+            echo "dir=$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
+          else
+            # The repository only contains the addons: fetch the matching core.
+            echo "Cloning odoo/odoo ($ODOO_BRANCH)..."
+            git clone --depth 1 --branch "$ODOO_BRANCH" https://github.com/odoo/odoo.git odoo-core
+            echo "dir=$GITHUB_WORKSPACE/odoo-core" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            odoo-core/requirements.txt
+
+      - name: Install OS packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libpq-dev \
+            libldap2-dev \
+            libsasl2-dev \
+            libssl-dev \
+            libffi-dev \
+            libjpeg-dev \
+            zlib1g-dev \
+            wkhtmltopdf
+
+      - name: Install Python dependencies
+        env:
+          ODOO_DIR: ${{ steps.core.outputs.dir }}
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r "$ODOO_DIR/requirements.txt"
+
+      - name: Detect the modules to test
+        id: modules
+        env:
+          INPUT_MODULES: ${{ inputs.modules }}
+        run: |
+          modules="$INPUT_MODULES"
+          if [ -z "$modules" ]; then
+            modules=$(python .github/scripts/check_addons.py --list-modules)
+          fi
+          # "mod_a,mod_b" -> "/mod_a,/mod_b" (Odoo test tag syntax)
+          tags=$(printf '%s' "$modules" | sed -E 's/([A-Za-z0-9_]+)/\/\1/g')
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "Modules under test: $modules (tags: $tags)"
+
+      - name: Run the Odoo test suite
+        env:
+          ODOO_DIR: ${{ steps.core.outputs.dir }}
+          MODULES: ${{ steps.modules.outputs.modules }}
+          TEST_TAGS: ${{ steps.modules.outputs.tags }}
+          TEST_TAGS_OVERRIDE: ${{ inputs.test_tags }}
+        run: |
+          set -o pipefail
+          if [ -z "$MODULES" ]; then
+            echo "No module to test."
+            exit 0
+          fi
+          # By default only the tests of the modules owned by this repository are
+          # executed ("/mod_a,/mod_b"). Use "*" to run the whole test suite.
+          tags="${TEST_TAGS_OVERRIDE:-$TEST_TAGS}"
+          args=(
+            --addons-path="$ODOO_DIR/addons,$ODOO_DIR/odoo/addons,$GITHUB_WORKSPACE/odoo/custom_addons"
+            --db_host="$PGHOST"
+            --db_port="$PGPORT"
+            --db_user="$PGUSER"
+            --db_password="$PGPASSWORD"
+            --data-dir="$RUNNER_TEMP/odoo-data"
+            -d "ci_${GITHUB_RUN_NUMBER}_${GITHUB_RUN_ATTEMPT}"
+            -i "$MODULES"
+            --test-enable
+            --test-tags="$tags"
+            --without-demo=all
+            --stop-after-init
+            --workers=0
+            --max-cron-threads=0
+            --log-level=test
+          )
+          # odoo-bin exits with 1 when at least one test failed.
+          python "$ODOO_DIR/odoo-bin" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/odoo-test.log"
+
+      - name: Upload the Odoo logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odoo-test-logs-${{ github.run_number }}
+          path: ${{ runner.temp }}/odoo-test.log
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 3. OCA style checks (advisory: it does not block the merge)
+  # ---------------------------------------------------------------------------
+  pylint-odoo:
+    name: Lint (pylint-odoo)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pylint-odoo
+        run: python -m pip install pylint-odoo
+
+      - name: Run pylint-odoo
+        run: |
+          pylint --load-plugins=odoo \
+            --disable=missing-docstring,missing-return-docstring,missing-return-type-docstring,invalid-name,too-few-public-methods,consider-merging-classes-inherited,protected-access,attribute-defined-outside-init,too-many-ancestors,duplicate-code,too-many-arguments,too-many-positional-arguments \
+            "${{ env.CUSTOM_ADDONS_DIR }}"/* || true
