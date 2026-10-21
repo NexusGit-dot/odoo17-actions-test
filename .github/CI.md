@@ -7,6 +7,15 @@ Two workflows are provided:
 | **Odoo CI** | `.github/workflows/ci.yml` | push / PR on `17.0`, manual | lint + install + unit tests |
 | **Odoo Deploy** | `.github/workflows/deploy.yml` | manual, `v*` tag | pull the code on a server and restart Odoo |
 
+The same `ci.yml` works in two situations:
+
+* **full Odoo fork** (this repository): the Odoo sources are already there, the
+  workflow uses them directly;
+* **addon-only repository**: the workflow downloads the matching Odoo core as
+  a tarball (`codeload.github.com/odoo/odoo/tar.gz/refs/heads/17.0`, ~170 MB)
+  and adds the addons of the repository to its `--addons-path`. A tarball is
+  used instead of `git clone` because it does not transfer the git history.
+
 ## 1. Before the first run
 
 The workflows only run on **your own** repository. The `origin` remote currently
